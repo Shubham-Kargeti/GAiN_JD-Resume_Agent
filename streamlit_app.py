@@ -13,7 +13,7 @@ col1, col2 = st.columns(2)
 with col1:
     if file_a:
         res = requests.post(
-            "http://localhost:8000/upload-jd/",
+            "http://localhost:8000/jd/upload/",
             files={"file": (file_a.name, file_a, file_a.type)}
         )
         if res.status_code == 200:
@@ -24,7 +24,7 @@ with col1:
 with col2:
     if file_b:
         res = requests.post(
-            "http://localhost:8000/upload-resume/",
+            "http://localhost:8000/resume/upload/",
             files={"file": (file_b.name, file_b, file_b.type)}
         )
         if res.status_code == 200:
@@ -37,7 +37,7 @@ st.markdown("---")
 
 # Process files
 if st.button("Process files"):
-    res = requests.get("http://localhost:8000/process")
+    res = requests.get("http://localhost:8000/process/process/")
     if res.status_code == 200:
         st.subheader("Resume Compatibility Output:")
         st.text_area("Output", res.json()["combined_text"], height=400)
