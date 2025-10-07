@@ -1,9 +1,12 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
-from utils import extract_text
+from app.utils import extract_text
 import os
 from typing import Dict, Optional
 from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="Resume Validator")
 
@@ -22,7 +25,8 @@ async def upload_jd(file: UploadFile = File(...)):
     if not allowed_file(file.filename):
         raise HTTPException(status_code=400, detail="Only .docx and .pdf files are allowed")
 
-    memory_store["jd"] = await file.read()
+    #memory_store["jd"] = await file.read()
+    memory_store["jd"] = {"bytes": await file.read(), "filename": file.filename}
     return {"info": f"Uploaded Job Description '{file.filename}' successfully."}
 
 @app.post("/upload-resume/")
@@ -32,7 +36,8 @@ async def upload_resume(file: UploadFile = File(...)):
     if not allowed_file(file.filename):
         raise HTTPException(status_code=400, detail="Only .docx and .pdf files are allowed")
 
-    memory_store["resume"] = await file.read()
+    #memory_store["resume"] = await file.read()
+    memory_store["resume"] = {"bytes": await file.read(), "filename": file.filename}
     return {"info": f"Uploaded Resume '{file.filename}' successfully."}
 
 @app.get("/process")
@@ -40,14 +45,18 @@ async def process():
     if "resume" not in memory_store or "jd" not in memory_store:
         return JSONResponse(status_code=400, content={"error": "Both resume and job description files must be uploaded first."})
 
+    resume_info = memory_store["resume"]
+    jd_info = memory_store["jd"]
+
     # Provide fake filenames/extensions to preserve compatibility
-    resume_text = extract_text(memory_store["resume"], "resume.pdf")
-    jd_text = extract_text(memory_store["jd"], "jd.pdf")
+    # resume_text = extract_text(memory_store["resume"], "resume.pdf")
+    # jd_text = extract_text(memory_store["jd"], "jd.pdf")
+    resume_text = extract_text(resume_info["bytes"], resume_info["filename"])
+    jd_text = extract_text(jd_info["bytes"], jd_info["filename"])
 
     
     client = OpenAI(
         # api_key=os.environ.get("OPENAI_API_KEY"),
-        api_key="",
         base_url="https://api.groq.com/openai/v1",
     )
     
