@@ -1,7 +1,30 @@
 from fastapi import FastAPI
 from app.api import resume, jd, process 
+from fastapi.middleware.cors import CORSMiddleware
+from app.api import suggestQA
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="Resume Validator")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load the ML model
+    app.state.question_suggester = suggestQA.QuestionSuggester(
+        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        faiss_path="app/vector_db/vector_store/faiss_index"
+    )
+    yield
+
+app = FastAPI(title="Resume Validator",lifespan=lifespan)
+
+#Define CORS
+app.add_middleware(
+    CORSMiddleware,
+    # allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # Register routers
 app.include_router(resume.router, prefix="/resume", tags=["Resume"])

@@ -11,6 +11,8 @@ venv/
 # Ignore all .env files
 env
 env.*
+data/*
+*.xlsx
 
 # Distribution / packaging
 *.egg
