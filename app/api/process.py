@@ -74,7 +74,7 @@ async def process(suggester=Depends(get_question_suggester)):
     )
 
     shrink_chain = shrink_prompt | llm
-    combined_text = f"{jd_text}\n\n{resume_text}"
+    combined_text = f"{jd_text}"
     shrinked_output = shrink_chain.invoke({"combined_text": combined_text})
 
     suggested_questions = suggester.suggest_questions(shrinked_output.content, top_k=20)
