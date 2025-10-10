@@ -13,6 +13,7 @@ env
 env.*
 data/*
 *.xlsx
+*.ipynb
 
 # Distribution / packaging
 *.egg

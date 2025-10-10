@@ -1,11 +1,16 @@
 from fastapi import APIRouter, HTTPException, Request, Depends
 from app.utils.text_extract import extract_text
 from app.config import memory_store
-from openai import OpenAI
+from app.schemas.schemas import ResumeAnalysisResponse
+import json
+from langchain.prompts import ChatPromptTemplate
+from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
+from langchain.schema.runnable import RunnableMap
+from langchain.prompts import PromptTemplate
+from langchain_groq import ChatGroq
 
 router = APIRouter()
 
-# Dependency injection function
 def get_question_suggester(request: Request):
     return request.app.state.question_suggester
 
@@ -18,104 +23,68 @@ async def process(suggester=Depends(get_question_suggester)):
     jd_info = memory_store["jd"]
 
     resume_text = extract_text(resume_info["bytes"], resume_info["filename"])
-    jd_text = extract_text(jd_info["bytes"], jd_info["filename"])
+    jd_text = extract_text(jd_info["bytes"], jd_info["filename"]) 
 
-    combined_text = resume_text + " " + jd_text   
+    llm = ChatGroq(model="openai/gpt-oss-20b")
+    pydantic_parser = PydanticOutputParser(pydantic_object=ResumeAnalysisResponse)
+    fixing_parser = OutputFixingParser.from_llm(parser=pydantic_parser, llm=llm)
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are an expert recruiter, resume strategist, and proofreader."),
+        ("user", """You will return JSON matching this schema:
+        {format_instructions}
 
-    client = OpenAI(base_url="https://api.groq.com/openai/v1")
+        Then, analyze:
+        --- JOB DESCRIPTION ---
+        {jd_text}
+        --- RESUME ---
+        {resume_text}
+        """)
+         ])
 
-    # Main evaluation prompt
-    user_input = f"""
-    You are an experienced recruiter, career strategist, and resume analyst.
-    Your task is to evaluate how well a given resume aligns with a specific job description. Assess the compatibility based on key factors such as skills, experience, education, and keywords relevant to the job role.
-    Given the job description and the resume text, provide the following:
-    Compatibility Score: Rate the overall match on a scale of 1 to 10, where 10 = excellent match and 1 = poor match.
-    Summary Evaluation (2-3 sentences): Briefly explain the reasoning behind the score, highlighting key strengths or gaps.
-    Key Matches: List up to 5 major points where the resume strongly aligns with the job description (skills, experiences, certifications, etc.).
-    Key Gaps: List up to 5 notable areas where the resume lacks alignment with the job description.
-    Recommendation: Suggest 1-2 ways the candidate could improve the resume to better match this job.
+    format_instructions = fixing_parser.get_format_instructions()
 
-    --- Job Description ---
-    {jd_text}
+    prompt_with_instructions = prompt.partial(format_instructions=format_instructions)
 
-    --- Resume ---
-    {resume_text}
-
-    Respond in the following format:
-
-    Score: X/10  
-    Explanation: <your explanation here>
-    """
-
-    response = client.responses.create(
-        input=user_input,
-        model="openai/gpt-oss-20b",
+    chain = (
+        RunnableMap({
+            "jd_text": lambda x: x["jd_text"],
+            "resume_text": lambda x: x["resume_text"],
+        })
+        | prompt_with_instructions
+        | llm
+        | fixing_parser
     )
 
-    # Shrink combined text for semantic matching prompt
-    user_input_2 = f"""
+    resp: ResumeAnalysisResponse = chain.invoke({
+        "jd_text": jd_text,
+        "resume_text": resume_text
+    })
+
+    shrink_prompt = PromptTemplate(
+        input_variables=["combined_text"],
+        template="""
     You are an experienced recruiter, career strategist, and resume analyst.
-    Your job is to shrink down given combined text from JD and resume into very precise and consise text focusing on technology names, skills required, possible question topics.
+    Your job is to shrink down the given combined text from JD and resume into very precise and concise text focusing on technology names, skills required, and possible question topics.
     This result will be used in Semantic matching with Interview questions.
     Return just the final text.
 
     combined_text:
-    {jd_text}
+    {combined_text}
     """
-
-    response_2 = client.responses.create(
-        input=user_input_2,
-        model="openai/gpt-oss-20b",
     )
 
-    suggested_questions = suggester.suggest_questions(response_2.output_text, top_k=15)
+    shrink_chain = shrink_prompt | llm
+    combined_text = f"{jd_text}\n\n{resume_text}"
+    shrinked_output = shrink_chain.invoke({"combined_text": combined_text})
 
-    # New detailed language and client name check prompt (resume only)
-    grammar_check_prompt = f"""
-    You are an expert proofreader and recruiter.
+    suggested_questions = suggester.suggest_questions(shrinked_output.content, top_k=20)
 
-    Your task is to analyze the given resume text and:
+    response  = resp.model_dump()
+    merged = {**response["Evaluation"], **response["Grammar_Check"]}
 
-    1. Identify any grammatical errors or awkward phrasing.
-    2. Detect spelling mistakes and offer corrections.
-    3. Look for any mention of client or organization names that an employee should avoid disclosing publicly or in resumes, and list them.
+    merged["Suggested_Questions"] = suggested_questions
 
-    Return your response as a structured report with these sections:
+    json_merged = json.dumps(merged, indent=2)
+    print(json_merged)
 
-    Grammatical Errors:
-    - List each error with context and suggested correction.
-
-    Spelling Mistakes:
-    - List each mistake with suggested correct spelling.
-
-    Client Names:
-    - List any detected client names that should be removed.
-
-    Only analyze the following resume text (do NOT analyze job description text):
-
-    Resume Text:
-    {resume_text}
-
-    Please provide a clear, concise report.
-    """
-
-    grammar_check_response = client.responses.create(
-        input=grammar_check_prompt,
-        model="openai/gpt-oss-20b",
-    )
-
-    detailed_report = grammar_check_response.output_text
-
-    return {
-        "combined_text": response.output_text,
-        "Questions": suggested_questions,
-        "detailed_report": detailed_report
-    }
-
-#1) JD_MatchScore
-#2) Score_Explaination
-#3) Key_Matches
-#4) KeyGaps
-#5) Recommendations
-#6) Suggested_Interview_Question
-#7) Gramatical_Errors
+    return json_merged

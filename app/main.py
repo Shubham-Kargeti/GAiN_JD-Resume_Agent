@@ -1,7 +1,6 @@
 from fastapi import FastAPI
-from app.api import resume, jd, process 
+from app.api import resume, jd, process,suggestQA
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import suggestQA
 from contextlib import asynccontextmanager
 
 @asynccontextmanager

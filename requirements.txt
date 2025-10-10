@@ -12,3 +12,4 @@ sentence-transformers
 openpyxl
 langchain
 langchain-community
+langchain_groq
