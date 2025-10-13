@@ -3,6 +3,7 @@ from app.utils.text_extract import extract_text
 from app.config import memory_store
 from app.schemas.schemas import ResumeAnalysisResponse
 import json
+import asyncio
 from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
 from langchain.schema.runnable import RunnableMap
@@ -55,18 +56,20 @@ async def process(suggester=Depends(get_question_suggester)):
         | fixing_parser
     )
 
-    resp: ResumeAnalysisResponse = chain.invoke({
-        "jd_text": jd_text,
-        "resume_text": resume_text
-    })
+    # resp = chain.invoke({
+    #     "jd_text": jd_text,
+    #     "resume_text": resume_text
+    # })
 
     shrink_prompt = PromptTemplate(
         input_variables=["combined_text"],
         template="""
-    You are an experienced recruiter, career strategist, and resume analyst.
-    Your job is to shrink down the given combined text from JD and resume into very precise and concise text focusing on technology names, skills required, and possible question topics.
-    This result will be used in Semantic matching with Interview questions.
-    Return just the final text.
+    You are an expert recruiter, career strategist, and resume analyst.
+    Your task is to extract and generate a concise, semantically rich summary from a combined job description and resume. Focus only on:
+        Key technologies and tools,Core technical and soft skills,Relevant domains or frameworks
+    The output will be used as a query input for retrieving the most relevant interview questions from a vector database.
+    Ensure the result is embedding-friendly, using keywords and phrases suitable for semantic search.
+    Avoid full sentences, explanations, or formatting.Return only the final keyword-rich text.
 
     combined_text:
     {combined_text}
@@ -75,14 +78,53 @@ async def process(suggester=Depends(get_question_suggester)):
 
     shrink_chain = shrink_prompt | llm
     combined_text = f"{jd_text}"
-    shrinked_output = shrink_chain.invoke({"combined_text": combined_text})
+    # shrinked_output = shrink_chain.invoke({"combined_text": combined_text})
+
+
+    resp_task = chain.ainvoke({
+        "jd_text": jd_text,
+        "resume_text": resume_text
+    })
+
+    shrink_task = shrink_chain.ainvoke({
+        "combined_text": combined_text
+    })
+
+    resp, shrinked_output = await asyncio.gather(resp_task, shrink_task)
 
     suggested_questions = suggester.suggest_questions(shrinked_output.content, top_k=20)
 
+    question_reframming_prompt = PromptTemplate(
+        input_variables=["suggested_questions"],
+        template="""
+   You are an expert recruiter, career strategist, and English language specialist.
+   You are given a list of raw interview questions retrieved from a database. These questions may be incomplete, repetitive, unpolished, or poorly worded.
+
+    Your task is to:
+    - Analyze and refine the list.
+    - Rephrase the questions using clear, professional, and grammatically correct language.
+    - Remove duplicates or near-duplicates.
+    - Ensure the final set is well-structured and suitable for sharing directly with a candidate.
+    - Make sure the questions collectively cover all key skills and topics represented in the input.
+
+    Focus on improving clarity, tone, and relevance while preserving the original intent behind each question.
+
+    suggested_questions:
+    {suggested_questions}
+    """
+    )
+
+    question_reframming = question_reframming_prompt | llm
+    question_reframming_task = question_reframming.ainvoke({
+        "suggested_questions": suggested_questions
+    })
+
+    reframmed_questions = await asyncio.gather(question_reframming_task)
+    print(reframmed_questions)
     response  = resp.model_dump()
     merged = {**response["Evaluation"], **response["Grammar_Check"]}
 
-    merged["Suggested_Questions"] = suggested_questions
+    merged["Suggested_Questions"] = reframmed_questions[0].content
 
     json_merged = json.dumps(merged, indent=2)
     print(json_merged)
