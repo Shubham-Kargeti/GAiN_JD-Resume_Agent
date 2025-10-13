@@ -6,36 +6,39 @@ class ResumeReport(BaseModel):
 
 class EvaluationSection(BaseModel):
     JD_MatchScore: str = Field(
-        description="Overall match score between the job description and the candidate's resume. Should be a out of 10 score"
+        description="A numerical score representing the match between the job description (JD) and the candidate's resume. The score should be out of 10, with 10 indicating a perfect match and 1 indicating very poor match. The score must be based on a detailed evaluation of how well the candidate's skills, experience, and qualifications align with the requirements outlined in the JD. Just providing a number without context is not acceptable. Example of output: '7/10 - Good match with key skills but lacks experience in some required technologies.'"
     )
-    Score_Explanation: str = Field(
-        description="Explanation of how the JD match score was determined, highlighting key evaluation criteria used."
+    Score_Explanation_NonTechnical: str = Field(
+        description="A short explanation (2-3 lines) for non-technical stakeholders that summarizes why the candidate received the given JD match score. Focus on high-level alignment with the job role, such as years of experience, industry fit, or major skill areas."
+    )
+    Score_Explanation_Technical: str = Field(
+        description="A detailed explanation of how the JD match score was determined, written for a technical reviewer. This should include specific technical skills, tools, technologies, certifications, and project experience that justify the score. Mention both strengths and areas for improvement."
     )
     Key_Matches: List[str] = Field(
         default_factory=list,
-        description="Important skills, experiences, or technologies that are present in both the resume and the job description."
+        description="A list of key skills, experiences, or technologies from the job description (JD) that the candidate's resume successfully matches. Each item should be described briefly but precisely, indicating where and how it appears in the resume. For example, 'Python programming' or '5+ years in project management'."
     )
     Key_Gaps: List[str] = Field(
         default_factory=list,
-        description="Missing or underrepresented qualifications or skills in the resume that are mentioned in the job description."
+        description="A list of missing or underrepresented qualifications, skills, or experiences from the resume that are explicitly required or mentioned in the job description. Each gap should be described clearly, such as 'No experience with JavaScript frameworks' or 'Missing leadership experience'."
     )
     Recommendations: List[str] = Field(
         default_factory=list,
-        description="Suggestions for improving the resume to better match the job description. These may include skill additions, rephrasing, or formatting improvements."
+        description="Suggestions for improving the resume to better match the job description. These may include skill additions, phrasing adjustments, or structural improvements. For example, 'Add relevant certifications like AWS Certified Solutions Architect' or 'Rephrase the summary to focus more on leadership experience'. Recommendations should be practical and actionable."
     )
 
 class GrammarCheckSection(BaseModel):
     Grammatical_Errors: List[str] = Field(
         default_factory=list,
-        description="List of grammatical errors found in the text."
+        description="A list of grammatical errors found in the resume. Each error should be identified with its location and a suggestion for correction."
     )
     Spelling_Mistakes: List[str] = Field(
         default_factory=list,
-        description="List of spelling mistakes detected in the text."
+        description="A list of spelling mistakes found in the resume. Each mistake should include the incorrect word along with the suggested correction. For example, 'Teh -> The'."
     )
     Client_Names: List[str] = Field(
         default_factory=list,
-        description="List of client or company names identified in the resume."
+        description="A list of client or company names identified in the resume."
     )
 
 class ResumeAnalysisResponse(BaseModel):

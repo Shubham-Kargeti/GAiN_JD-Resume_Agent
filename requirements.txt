@@ -4,7 +4,6 @@ python-multipart
 python-docx
 pdfplumber
 requests
-streamlit
 openai
 python-dotenv
 faiss-cpu
