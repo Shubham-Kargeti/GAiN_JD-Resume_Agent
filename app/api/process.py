@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request, Depends
 from app.utils.text_extract import extract_text
 from app.config import memory_store
-from app.schemas.schemas import ResumeAnalysisResponse
+from app.schemas.schemas import ResumeAnalysisResponse,JDAnalysisResponse
 import json
 import asyncio
 from langchain.prompts import ChatPromptTemplate
@@ -12,16 +12,18 @@ from langchain_groq import ChatGroq
 
 router = APIRouter()
 
+
 def get_question_suggester(request: Request):
     return request.app.state.question_suggester
 
-@router.get("/process/")
+@router.get("/process/jd_resume_match")
 async def process(suggester=Depends(get_question_suggester)):
     if "resume" not in memory_store or "jd" not in memory_store:
         raise HTTPException(status_code=400, detail="Both resume and job description files must be uploaded first.")
 
     resume_info = memory_store["resume"]
-    jd_info = memory_store["jd"]
+    jd_store = memory_store.get("jd", {})
+    jd_info = jd_store['jd_resume_match']
 
     resume_text = extract_text(resume_info["bytes"], resume_info["filename"])
     jd_text = extract_text(jd_info["bytes"], jd_info["filename"]) 
@@ -56,11 +58,6 @@ async def process(suggester=Depends(get_question_suggester)):
         | fixing_parser
     )
 
-    # resp = chain.invoke({
-    #     "jd_text": jd_text,
-    #     "resume_text": resume_text
-    # })
-
     shrink_prompt = PromptTemplate(
         input_variables=["combined_text"],
         template="""
@@ -78,8 +75,6 @@ async def process(suggester=Depends(get_question_suggester)):
 
     shrink_chain = shrink_prompt | llm
     combined_text = f"{jd_text}"
-    # shrinked_output = shrink_chain.invoke({"combined_text": combined_text})
-
 
     resp_task = chain.ainvoke({
         "jd_text": jd_text,
@@ -130,3 +125,50 @@ async def process(suggester=Depends(get_question_suggester)):
     print(json_merged)
 
     return json_merged
+
+
+@router.get("/process/analyze_jd/")
+async def analyzejd():
+    jd_store = memory_store.get("jd", {})
+    jd_info = jd_store['analyze_jd']
+    jd_text = extract_text(jd_info["bytes"], jd_info["filename"])
+
+    llm = ChatGroq(model="openai/gpt-oss-20b")
+
+    # Set up the output parser for JDAnalysisResponse
+    pydantic_parser = PydanticOutputParser(pydantic_object=JDAnalysisResponse)
+    fixing_parser = OutputFixingParser.from_llm(parser=pydantic_parser, llm=llm)
+
+    prompt = PromptTemplate(
+        input_variables=["jd_text", "format_instructions"],
+        template="""
+            You are an HR Analyst AI assistant. Given the following Job Description (JD), perform the following tasks:
+
+            1. Sanitize the JD: Remove any sensitive or customer-identifiable info (like client names, company names, emails, phone numbers).
+            2. Extract:
+            - Must-have skills (3–5)
+            - Good-to-have skills (2–3)
+            - Location
+            - Duration
+
+            Respond in JSON using this schema:
+            {format_instructions}
+
+            --- JOB DESCRIPTION ---
+            {jd_text}
+            """
+    )
+
+    format_instructions = fixing_parser.get_format_instructions()
+
+    # Combine prompt and model
+    chain = (
+        prompt.partial(format_instructions=format_instructions)
+        | llm
+        | fixing_parser
+    )
+
+    result = await chain.ainvoke({"jd_text": jd_text})
+
+    # Final response is already a validated JDAnalysisResponse
+    return result.dict()

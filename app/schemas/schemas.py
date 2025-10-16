@@ -44,3 +44,20 @@ class GrammarCheckSection(BaseModel):
 class ResumeAnalysisResponse(BaseModel):
     Evaluation: EvaluationSection
     Grammar_Check: GrammarCheckSection
+
+class JDAnalysisResponse(BaseModel):
+    sanitized_jd: str = Field(
+        description="Job description text with sensitive or customer-identifiable information removed."
+    )
+    must_have_skills: List[str] = Field(
+        description="List of all essential skills required for the job."
+    )
+    good_to_have_skills: List[str] = Field(
+        description="List of all the optional or nice-to-have skills."
+    )
+    location: str = Field(
+        description="Job location as mentioned in the JD (e.g., Remote, On-site, City name)."
+    )
+    duration: str = Field(
+        description="Job duration in Months or years. Return 'No duration specified' if not available."
+    )
