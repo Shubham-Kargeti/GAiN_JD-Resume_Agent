@@ -101,6 +101,7 @@ async def process(suggester=Depends(get_question_suggester)):
     - Remove duplicates or near-duplicates.
     - Ensure the final set is well-structured and suitable for sharing directly with a candidate.
     - Make sure the questions collectively cover all key skills and topics represented in the input.
+    - Only return the formated questions. Do not return anything else in prefix or suffix of questions
 
     Focus on improving clarity, tone, and relevance while preserving the original intent behind each question.
 
