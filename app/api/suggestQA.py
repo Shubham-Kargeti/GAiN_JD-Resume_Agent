@@ -12,12 +12,22 @@ class QuestionSuggester:
             allow_dangerous_deserialization=True
         )
 
-    def suggest_questions(self, input_text: str, top_k: int = 15) -> List[Dict[str, float]]:
-        results = self.vectorstore.similarity_search_with_score(input_text, k=top_k)
+    def suggest_questions(self, input_text: str, top_k: int = 15,filter_value:str = "question") -> List[Dict[str, float]]:
+        # results = self.vectorstore.similarity_search_with_score(input_text, k=top_k)
+        results = self.vectorstore.similarity_search_with_score(input_text, k=top_k,filter={"type": filter_value})
         return [
             {
                 "question": doc.page_content,
-                "score": float(score)
             }
-            for doc, score in results
+            for doc, _ in results
         ]
+    
+    def suggest_courses(self, input_text: str, top_k: int = 15,filter_value:str = "resource") -> List[Dict[str, float]]:
+        results = self.vectorstore.similarity_search_with_score(input_text, k=top_k,filter={"type": filter_value})
+        return [
+            {
+                "course": doc.page_content,
+            }
+            for doc, _ in results
+        ]
+

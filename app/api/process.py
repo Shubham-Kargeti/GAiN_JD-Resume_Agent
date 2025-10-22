@@ -66,7 +66,8 @@ async def process(suggester=Depends(get_question_suggester)):
         Key technologies and tools,Core technical and soft skills,Relevant domains or frameworks
     The output will be used as a query input for retrieving the most relevant interview questions from a vector database.
     Ensure the result is embedding-friendly, using keywords and phrases suitable for semantic search.
-    Avoid full sentences, explanations, or formatting.Return only the final keyword-rich text.
+    Avoid full sentences, explanations, or formatting. 
+    #Important: Return only top 5 final keyword-rich text.
 
     combined_text:
     {combined_text}
@@ -88,6 +89,8 @@ async def process(suggester=Depends(get_question_suggester)):
     resp, shrinked_output = await asyncio.gather(resp_task, shrink_task)
 
     suggested_questions = suggester.suggest_questions(shrinked_output.content, top_k=20)
+    print('shrinked output',shrinked_output.content)
+    print('suggested questions',suggested_questions)
 
     question_reframming_prompt = PromptTemplate(
         input_variables=["suggested_questions"],
@@ -102,6 +105,7 @@ async def process(suggester=Depends(get_question_suggester)):
     - Ensure the final set is well-structured and suitable for sharing directly with a candidate.
     - Make sure the questions collectively cover all key skills and topics represented in the input.
     - Only return the formated questions. Do not return anything else in prefix or suffix of questions
+    - Always return the answers in a single python list format
 
     Focus on improving clarity, tone, and relevance while preserving the original intent behind each question.
 
@@ -117,12 +121,20 @@ async def process(suggester=Depends(get_question_suggester)):
 
     reframmed_questions = await asyncio.gather(question_reframming_task)
     print(reframmed_questions)
-    response  = resp.model_dump()
+
+    response = resp.model_dump()  # or resp.dict() for Pydantic v1
     merged = {**response["Evaluation"], **response["Grammar_Check"]}
 
     merged["Suggested_Questions"] = reframmed_questions[0].content
 
+    key_gaps_clean = [str(item).replace("\n", " ") for item in merged.get("Key_Gaps", [])]
+    key_gaps_str = " ".join(key_gaps_clean)
+
+    suggest_course = suggester.suggest_courses(key_gaps_str, top_k=20,filter_value = 'resource')
+    merged['Suggest_course'] = suggest_course
+
     json_merged = json.dumps(merged, indent=2)
+
     print(json_merged)
 
     return json_merged

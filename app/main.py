@@ -8,7 +8,7 @@ async def lifespan(app: FastAPI):
     # Load the ML model
     app.state.question_suggester = suggestQA.QuestionSuggester(
         model_name="sentence-transformers/all-MiniLM-L6-v2",
-        faiss_path="app/vector_db/vector_store/faiss_index"
+        faiss_path="app/vector_db/vector_store/faiss_index2"
     )
     yield
 
