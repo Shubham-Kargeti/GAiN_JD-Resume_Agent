@@ -3,6 +3,7 @@ from app.utils.text_extract import extract_text
 from app.config import memory_store
 from app.schemas.schemas import ResumeAnalysisResponse,JDAnalysisResponse
 import json
+import ast
 import asyncio
 from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
@@ -15,6 +16,29 @@ router = APIRouter()
 
 def get_question_suggester(request: Request):
     return request.app.state.question_suggester
+
+# === Modification: Add normalization utility ===
+def normalize_suggested_questions(raw_content):
+    """Ensure suggested questions are always a list of strings (from LLM or fallback)."""
+    try:
+        arr = json.loads(raw_content)
+        if isinstance(arr, list):
+            return [str(i) for i in arr]
+    except Exception: pass
+
+    try:
+        arr = ast.literal_eval(raw_content)
+        if isinstance(arr, list):
+            return [str(i) for i in arr]
+    except Exception: pass
+
+    # Fallback: split newline, remove brackets
+    return [
+        s.strip().strip('"').strip("'")
+        for s in raw_content.replace('[', '').replace(']', '').split('\n')
+        if s.strip()
+    ]
+#=========================================================#
 
 @router.get("/process/jd_resume_match")
 async def process(suggester=Depends(get_question_suggester)):
@@ -92,27 +116,55 @@ async def process(suggester=Depends(get_question_suggester)):
     print('shrinked output',shrinked_output.content)
     print('suggested questions',suggested_questions)
 
+
     question_reframming_prompt = PromptTemplate(
-        input_variables=["suggested_questions"],
-        template="""
-   You are an expert recruiter, career strategist, and English language specialist.
-   You are given a list of raw interview questions retrieved from a database. These questions may be incomplete, repetitive, unpolished, or poorly worded.
+    input_variables=["suggested_questions"],
+    template="""
+        You are an expert recruiter, career strategist, and English language specialist.
+        You are given a list of raw interview questions retrieved from a database. These questions may be incomplete, repetitive, unpolished, or poorly worded.
 
-    Your task is to:
-    - Analyze and refine the list.
-    - Rephrase the questions using clear, professional, and grammatically correct language.
-    - Remove duplicates or near-duplicates.
-    - Ensure the final set is well-structured and suitable for sharing directly with a candidate.
-    - Make sure the questions collectively cover all key skills and topics represented in the input.
-    - Only return the formated questions. Do not return anything else in prefix or suffix of questions
-    - Always return the answers in a single python list format
+        Your task is to:
+        - Analyze and refine the list.
+        - Rephrase the questions using clear, professional, and grammatically correct language.
+        - Remove duplicates or near-duplicates.
+        - Ensure the final set is well-structured and suitable for sharing directly with a candidate.
+        - Make sure the questions collectively cover all key skills and topics represented in the input.
 
-    Focus on improving clarity, tone, and relevance while preserving the original intent behind each question.
+        Return ONLY a valid JSON array of strings, for example:
+        ["What is your experience with FastAPI?", "How do you secure REST APIs?", "Describe your approach to CI/CD pipelines."]
 
-    suggested_questions:
-    {suggested_questions}
-    """
-    )
+        Do NOT use Python list syntax.
+        Do NOT include explanations, prefixes, or suffixes—only the JSON array.
+        Do NOT include metadata, labels, or extra formatting.
+
+        suggested_questions:
+        {suggested_questions}
+        """
+        )
+
+
+#     question_reframming_prompt = PromptTemplate(
+#         input_variables=["suggested_questions"],
+#         template="""
+#    You are an expert recruiter, career strategist, and English language specialist.
+#    You are given a list of raw interview questions retrieved from a database. These questions may be incomplete, repetitive, unpolished, or poorly worded.
+
+#     Your task is to:
+#     - Analyze and refine the list.
+#     - Rephrase the questions using clear, professional, and grammatically correct language.
+#     - Remove duplicates or near-duplicates.
+#     - Ensure the final set is well-structured and suitable for sharing directly with a candidate.
+#     - Make sure the questions collectively cover all key skills and topics represented in the input.
+#     - Only return the formated questions. Do not return anything else in prefix or suffix of questions
+#     - Always return the answers in a single python list format
+
+#     Focus on improving clarity, tone, and relevance while preserving the original intent behind each question.
+
+#     suggested_questions:
+#     {suggested_questions}
+#     """
+#     )
+
 
     question_reframming = question_reframming_prompt | llm
     question_reframming_task = question_reframming.ainvoke({
@@ -125,7 +177,10 @@ async def process(suggester=Depends(get_question_suggester)):
     response = resp.model_dump()  # or resp.dict() for Pydantic v1
     merged = {**response["Evaluation"], **response["Grammar_Check"]}
 
-    merged["Suggested_Questions"] = reframmed_questions[0].content
+     # === Modification: Normalize output for FE here ===
+    merged["Suggested_Questions"] = normalize_suggested_questions(reframmed_questions[0].content)
+
+    #merged["Suggested_Questions"] = reframmed_questions[0].content
 
     key_gaps_clean = [str(item).replace("\n", " ") for item in merged.get("Key_Gaps", [])]
     key_gaps_str = " ".join(key_gaps_clean)
