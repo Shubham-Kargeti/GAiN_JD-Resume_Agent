@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Request, Depends
 from app.utils.text_extract import extract_text
 from app.config import memory_store
-from app.schemas.schemas import ResumeAnalysisResponse,JDAnalysisResponse
+from app.schemas.schemas import ResumeAnalysisResponse,JDAnalysisResponse,ShrinkSummaryResponse
 import json
 import ast
 import asyncio
@@ -82,39 +82,77 @@ async def process(suggester=Depends(get_question_suggester)):
         | fixing_parser
     )
 
-    shrink_prompt = PromptTemplate(
-        input_variables=["combined_text"],
-        template="""
-    You are an expert recruiter, career strategist, and resume analyst.
-    Your task is to extract and generate a concise, semantically rich summary from a combined job description and resume. Focus only on:
-        Key technologies and tools,Core technical and soft skills,Relevant domains or frameworks
-    The output will be used as a query input for retrieving the most relevant interview questions from a vector database.
-    Ensure the result is embedding-friendly, using keywords and phrases suitable for semantic search.
-    Avoid full sentences, explanations, or formatting. 
-    #Important: Return only top 5 final keyword-rich text.
+    # shrink_prompt = PromptTemplate(
+    #     input_variables=["combined_text"],
+    #     template="""
+    # Your task is to extract and generate a concise, semantically rich summary from a combined job description and resume. Focus only on:
+    #     Key technologies and tools,Core technical and soft skills,Relevant domains or frameworks
+    # The output will be used as a query input for retrieving the most relevant interview questions from a vector database.
+    # Write one or two natural language sentences describing what these keywords might represent or what information someone might be looking for.
 
-    combined_text:
-    {combined_text}
-    """
-    )
+    # combined_text:
+    # {combined_text}
+    # """
+    # )
 
-    shrink_chain = shrink_prompt | llm
-    combined_text = f"{jd_text}"
+    # shrink_chain = shrink_prompt | llm
+    # combined_text = f"{jd_text}"
 
+    # shrink_task = shrink_chain.ainvoke({
+    #     "combined_text": combined_text
+    # })
     resp_task = chain.ainvoke({
         "jd_text": jd_text,
         "resume_text": resume_text
     })
 
+    pydantic_parser_shrink = PydanticOutputParser(pydantic_object=ShrinkSummaryResponse)
+    fixing_parser_shrink = OutputFixingParser.from_llm(parser=pydantic_parser_shrink, llm=llm)
+
+    prompt_shrink = ChatPromptTemplate.from_messages([
+        ("system", "You are an expert technical recruiter and resume summarization assistant."),
+        ("user", """You will return JSON matching this schema:
+    {format_instructions_shrink}
+
+    Your task is to extract and generate a concise, semantically rich summary from a combined job description and resume.
+
+    Focus only on:
+    - Key technologies and tools
+    - Core technical and soft skills
+    - Relevant domains or frameworks
+
+    Write **multiple short, clear sentences** (ideally 4–6) instead of long ones.
+    Each sentence should describe one key aspect or capability derived from the text.
+
+    --- COMBINED TEXT ---
+    {combined_text}
+    """)
+    ])
+
+    format_instructions_shrink = fixing_parser_shrink.get_format_instructions()
+    prompt_with_instructions_shrink = prompt_shrink.partial(format_instructions_shrink=format_instructions_shrink)
+    shrink_chain = (
+        RunnableMap({
+            "combined_text": lambda x: x["combined_text"],
+        })
+        | prompt_with_instructions_shrink
+        | llm
+        | fixing_parser_shrink
+    )
+
+    combined_text = f"{jd_text}" 
     shrink_task = shrink_chain.ainvoke({
         "combined_text": combined_text
     })
 
     resp, shrinked_output = await asyncio.gather(resp_task, shrink_task)
-
-    suggested_questions = suggester.suggest_questions(shrinked_output.content, top_k=20)
-    print('shrinked output',shrinked_output.content)
-    print('suggested questions',suggested_questions)
+    print('shrinked output:',shrinked_output.sentences)
+    suggested_questions = [
+    q
+    for query in shrinked_output.sentences
+    for q in suggester.suggest_questions(query, top_k=20)
+    ]
+    print('suggested questions:',suggested_questions)
 
 
     question_reframming_prompt = PromptTemplate(
@@ -172,7 +210,7 @@ async def process(suggester=Depends(get_question_suggester)):
     })
 
     reframmed_questions = await asyncio.gather(question_reframming_task)
-    print(reframmed_questions)
+    # print(reframmed_questions)
 
     response = resp.model_dump()  # or resp.dict() for Pydantic v1
     merged = {**response["Evaluation"], **response["Grammar_Check"]}

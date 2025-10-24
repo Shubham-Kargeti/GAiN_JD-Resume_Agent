@@ -61,3 +61,10 @@ class JDAnalysisResponse(BaseModel):
     duration: str = Field(
         description="Job duration in Months or years. Return 'No duration specified' if not available."
     )
+
+
+class ShrinkSummaryResponse(BaseModel):
+    sentences: List[str] = Field(
+        ...,
+        description="List of concise sentences summarizing key technologies, tools, skills, and domains."
+    )

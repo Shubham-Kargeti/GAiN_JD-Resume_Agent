@@ -15,12 +15,7 @@ class QuestionSuggester:
     def suggest_questions(self, input_text: str, top_k: int = 15,filter_value:str = "question") -> List[Dict[str, float]]:
         # results = self.vectorstore.similarity_search_with_score(input_text, k=top_k)
         results = self.vectorstore.similarity_search_with_score(input_text, k=top_k,filter={"type": filter_value})
-        return [
-            {
-                "question": doc.page_content,
-            }
-            for doc, _ in results
-        ]
+        return [doc.page_content for doc, _ in results]
     
     def suggest_courses(self, input_text: str, top_k: int = 15,filter_value:str = "resource") -> List[Dict[str, float]]:
         results = self.vectorstore.similarity_search_with_score(input_text, k=top_k,filter={"type": filter_value})
