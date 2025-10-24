@@ -5,10 +5,11 @@ from app.schemas.schemas import ResumeAnalysisResponse,JDAnalysisResponse,Shrink
 import json
 import ast
 import asyncio
-from langchain.prompts import ChatPromptTemplate
-from langchain.output_parsers import PydanticOutputParser, OutputFixingParser
-from langchain.schema.runnable import RunnableMap
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
+from langchain.output_parsers.fix import OutputFixingParser
+from langchain_core.output_parsers.pydantic import PydanticOutputParser
+from langchain_core.runnables.base import RunnableMap
+from langchain_core.prompts import PromptTemplate
 from langchain_groq import ChatGroq
 
 router = APIRouter()
