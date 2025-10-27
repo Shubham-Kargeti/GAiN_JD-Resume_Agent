@@ -61,6 +61,9 @@ class JDAnalysisResponse(BaseModel):
     duration: str = Field(
         description="Job duration in Months or years. Return 'No duration specified' if not available."
     )
+    experience: str = Field(
+        description="Experience requirements for the role, as stated in the JD (e.g., '2-5 years', '5+ years'). Return 'Not specified' if missing."
+    )
 
 class ShrinkSummaryResponse(BaseModel):
     sentences: List[str] = Field(

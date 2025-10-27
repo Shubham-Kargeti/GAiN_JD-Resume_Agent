@@ -206,6 +206,7 @@ async def analyzejd():
             - Good-to-have skills (2-3)
             - Location
             - Duration
+            - Experience: Extract and return all experience-related requirements or statements found in the JD, including ranges, role-specific requirements (e.g., "2+ years with LLMs" and "8+ years Python"). If more than one experience is mentioned, include each in a single text field separated by semicolons. If absent, return "Not specified".
 
             Respond in JSON using this schema:
             {format_instructions}
@@ -225,5 +226,7 @@ async def analyzejd():
     )
 
     result = await chain.ainvoke({"jd_text": jd_text})
+
+    print (result.dict())
 
     return result.dict()
