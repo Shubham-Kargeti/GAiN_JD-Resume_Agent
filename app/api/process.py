@@ -227,6 +227,4 @@ async def analyzejd():
 
     result = await chain.ainvoke({"jd_text": jd_text})
 
-    print (result.dict())
-
     return result.dict()
