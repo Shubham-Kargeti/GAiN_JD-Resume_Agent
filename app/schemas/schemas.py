@@ -62,7 +62,6 @@ class JDAnalysisResponse(BaseModel):
         description="Job duration in Months or years. Return 'No duration specified' if not available."
     )
 
-
 class ShrinkSummaryResponse(BaseModel):
     sentences: List[str] = Field(
         ...,

@@ -23,9 +23,6 @@ async def upload_jd(process_type: str,
     if not allowed_file(file.filename):
         raise HTTPException(status_code=400, detail="Only .docx and .pdf files are allowed")
 
-    # Save JD to memory
-    # memory_store["jd"][process_type] = {"bytes": await file.read(), "filename": file.filename}
-    # Ensure the jd section exists in memory
     if "jd" not in memory_store:
         memory_store["jd"] = {}
 

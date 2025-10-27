@@ -18,7 +18,6 @@ router = APIRouter()
 def get_question_suggester(request: Request):
     return request.app.state.question_suggester
 
-# === Modification: Add normalization utility ===
 def normalize_suggested_questions(raw_content):
     """Ensure suggested questions are always a list of strings (from LLM or fallback)."""
     try:
@@ -33,13 +32,11 @@ def normalize_suggested_questions(raw_content):
             return [str(i) for i in arr]
     except Exception: pass
 
-    # Fallback: split newline, remove brackets
     return [
         s.strip().strip('"').strip("'")
         for s in raw_content.replace('[', '').replace(']', '').split('\n')
         if s.strip()
     ]
-#=========================================================#
 
 @router.get("/process/jd_resume_match")
 async def process(suggester=Depends(get_question_suggester)):
@@ -83,25 +80,6 @@ async def process(suggester=Depends(get_question_suggester)):
         | fixing_parser
     )
 
-    # shrink_prompt = PromptTemplate(
-    #     input_variables=["combined_text"],
-    #     template="""
-    # Your task is to extract and generate a concise, semantically rich summary from a combined job description and resume. Focus only on:
-    #     Key technologies and tools,Core technical and soft skills,Relevant domains or frameworks
-    # The output will be used as a query input for retrieving the most relevant interview questions from a vector database.
-    # Write one or two natural language sentences describing what these keywords might represent or what information someone might be looking for.
-
-    # combined_text:
-    # {combined_text}
-    # """
-    # )
-
-    # shrink_chain = shrink_prompt | llm
-    # combined_text = f"{jd_text}"
-
-    # shrink_task = shrink_chain.ainvoke({
-    #     "combined_text": combined_text
-    # })
     resp_task = chain.ainvoke({
         "jd_text": jd_text,
         "resume_text": resume_text
@@ -181,45 +159,17 @@ async def process(suggester=Depends(get_question_suggester)):
         """
         )
 
-
-#     question_reframming_prompt = PromptTemplate(
-#         input_variables=["suggested_questions"],
-#         template="""
-#    You are an expert recruiter, career strategist, and English language specialist.
-#    You are given a list of raw interview questions retrieved from a database. These questions may be incomplete, repetitive, unpolished, or poorly worded.
-
-#     Your task is to:
-#     - Analyze and refine the list.
-#     - Rephrase the questions using clear, professional, and grammatically correct language.
-#     - Remove duplicates or near-duplicates.
-#     - Ensure the final set is well-structured and suitable for sharing directly with a candidate.
-#     - Make sure the questions collectively cover all key skills and topics represented in the input.
-#     - Only return the formated questions. Do not return anything else in prefix or suffix of questions
-#     - Always return the answers in a single python list format
-
-#     Focus on improving clarity, tone, and relevance while preserving the original intent behind each question.
-
-#     suggested_questions:
-#     {suggested_questions}
-#     """
-#     )
-
-
     question_reframming = question_reframming_prompt | llm
     question_reframming_task = question_reframming.ainvoke({
         "suggested_questions": suggested_questions
     })
 
     reframmed_questions = await asyncio.gather(question_reframming_task)
-    # print(reframmed_questions)
 
-    response = resp.model_dump()  # or resp.dict() for Pydantic v1
+    response = resp.model_dump()
     merged = {**response["Evaluation"], **response["Grammar_Check"]}
 
-     # === Modification: Normalize output for FE here ===
     merged["Suggested_Questions"] = normalize_suggested_questions(reframmed_questions[0].content)
-
-    #merged["Suggested_Questions"] = reframmed_questions[0].content
 
     key_gaps_clean = [str(item).replace("\n", " ") for item in merged.get("Key_Gaps", [])]
     key_gaps_str = " ".join(key_gaps_clean)
@@ -242,7 +192,6 @@ async def analyzejd():
 
     llm = ChatGroq(model="openai/gpt-oss-20b")
 
-    # Set up the output parser for JDAnalysisResponse
     pydantic_parser = PydanticOutputParser(pydantic_object=JDAnalysisResponse)
     fixing_parser = OutputFixingParser.from_llm(parser=pydantic_parser, llm=llm)
 
@@ -253,8 +202,8 @@ async def analyzejd():
 
             1. Sanitize the JD: Remove any sensitive or customer-identifiable info (like client names, company names, emails, phone numbers).
             2. Extract:
-            - Must-have skills (3–5)
-            - Good-to-have skills (2–3)
+            - Must-have skills (3-5)
+            - Good-to-have skills (2-3)
             - Location
             - Duration
 
@@ -277,5 +226,4 @@ async def analyzejd():
 
     result = await chain.ainvoke({"jd_text": jd_text})
 
-    # Final response is already a validated JDAnalysisResponse
     return result.dict()

@@ -11,14 +11,6 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
                 text_parts.append(page_text)
     return "\n".join(text_parts)
 
-# def extract_text_from_docx(file_bytes: bytes) -> str:
-#     document = Document(io.BytesIO(file_bytes))
-#     text_parts = []
-#     for para in document.paragraphs:
-#         if para.text:
-#             text_parts.append(para.text)
-#     return "\n".join(text_parts)
-
 def extract_text_from_docx(file_bytes: bytes) -> str:
     """
     Extracts all available text from a DOCX file, including paragraphs and table cells.
