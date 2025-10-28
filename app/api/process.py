@@ -177,6 +177,8 @@ async def process(suggester=Depends(get_question_suggester)):
     suggest_course = suggester.suggest_courses(key_gaps_str, top_k=20,filter_value = 'resource')
     merged['Suggest_course'] = suggest_course
 
+    merged["Resume_Filename"] = resume_info.get("filename", "analysis-result").rsplit('.', 1)[0]
+
     json_merged = json.dumps(merged, indent=2)
 
     print(json_merged)
